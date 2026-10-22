@@ -1,0 +1,190 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payroll Management System</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f1f5f9;color:#172033}
+header{background:#142c4e;color:white;padding:24px 5%}
+header h1{margin:0 0 8px;font-size:27px}
+header p{margin:0;color:#cbd8e8}
+main{max-width:1100px;margin:25px auto;padding:0 15px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.card,.panel{background:white;padding:20px;border-radius:12px;box-shadow:0 3px 12px #142c4e0d}
+.stats small{color:#64748b}
+.stats h2{margin:10px 0 0;color:#1765cc}
+.panel{margin-bottom:20px}
+h3{margin-top:0}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+input,select,button{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:7px;font-size:15px}
+button{background:#1765cc;color:white;border:0;cursor:pointer;font-weight:bold}
+button:hover{opacity:.9}
+.secondary{background:#64748b}
+.danger{background:#dc3545}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.actions button{width:auto}
+.search{margin:12px 0}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:12px;text-align:left;border-bottom:1px solid #e2e8f0}
+th{background:#edf4fc}
+td button{width:auto;padding:8px;margin:2px;font-size:12px}
+footer{text-align:center;color:#64748b;padding:25px}
+.note{font-size:13px;color:#64748b}
+</style>
+</head>
+<body>
+<header>
+<h1>💼 Payroll Management System</h1>
+<p>Employee management, salary calculation and payslips</p>
+</header>
+<main>
+<div class="stats">
+<div class="card"><small>Total Employees</small><h2 id="count">0</h2></div>
+<div class="card"><small>Total Gross Salary</small><h2 id="gross">₹0</h2></div>
+<div class="card"><small>Total Deductions</small><h2 id="deductions">₹0</h2></div>
+<div class="card"><small>Net Payroll</small><h2 id="net">₹0</h2></div>
+</div>
+
+<section class="panel">
+<h3 id="formTitle">Add Employee</h3>
+<form id="employeeForm">
+<input id="empId" placeholder="Employee ID (e.g. E101)" required>
+<input id="name" placeholder="Employee full name" required>
+<input id="department" placeholder="Department" required>
+<input id="position" placeholder="Job position" required>
+<input id="basic" type="number" min="0" step="0.01" placeholder="Basic salary (₹)" required>
+<input id="allowance" type="number" min="0" step="0.01" value="0" placeholder="Allowance (₹)">
+<input id="deduct" type="number" min="0" step="0.01" value="0" placeholder="Deduction (₹)">
+<button type="submit" id="saveBtn">Add Employee</button>
+<button type="button" class="secondary" onclick="resetForm()">Clear Form</button>
+</form>
+<p class="note">Enter salary and deduction amounts in rupees. Net salary = basic salary + allowance − deduction.</p>
+</section>
+
+<section class="panel">
+<h3>Employee Payroll Records</h3>
+<input class="search" id="search" placeholder="Search by ID, name or department..." oninput="render()">
+<div class="table-wrap">
+<table>
+<thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Basic</th><th>Allowance</th><th>Deduction</th><th>Net Salary</th><th>Actions</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+<div class="actions">
+<button onclick="exportData()">Export Backup</button>
+<button class="secondary" onclick="document.getElementById('importFile').click()">Import Backup</button>
+<input hidden id="importFile" type="file" accept=".json,application/json" onchange="importData(event)">
+<button class="secondary" onclick="window.print()">Print Page</button>
+</div>
+</section>
+</main>
+<footer>Payroll Management System | College Mini Project</footer>
+
+<script>
+let employees=[];
+try { employees=JSON.parse(localStorage.getItem("payrollEmployees")||"[]"); }
+catch(e){ employees=[]; }
+let editingId=null;
+const money=n=>"₹"+Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:2});
+const el=id=>document.getElementById(id);
+function save(){localStorage.setItem("payrollEmployees",JSON.stringify(employees));}
+function resetForm(){
+el("employeeForm").reset();
+el("allowance").value=0;
+el("deduct").value=0;
+editingId=null;
+el("formTitle").textContent="Add Employee";
+el("saveBtn").textContent="Add Employee";
+el("empId").disabled=false;
+}
+el("employeeForm").addEventListener("submit",function(e){
+e.preventDefault();
+const id=el("empId").value.trim();
+const name=el("name").value.trim();
+const department=el("department").value.trim();
+const position=el("position").value.trim();
+const basic=Number(el("basic").value);
+const allowance=Number(el("allowance").value||0);
+const deduction=Number(el("deduct").value||0);
+if(!id||!name||!department||!position||basic<0||allowance<0||deduction<0){
+alert("Please enter valid employee details and salary amounts.");return;
+}
+if(deduction>basic+allowance){
+if(!confirm("Deduction is greater than gross salary. Continue?"))return;
+}
+if(employees.some(x=>x.id.toLowerCase()===id.toLowerCase()&&x.id!==editingId)){
+alert("This Employee ID already exists.");return;
+}
+const employee={id,name,department,position,basic,allowance,deduction};
+if(editingId){
+const index=employees.findIndex(x=>x.id===editingId);
+if(index!==-1)employees[index]=employee;
+}else employees.push(employee);
+save();resetForm();render();
+});
+function editEmployee(id){
+const x=employees.find(e=>e.id===id);if(!x)return;
+editingId=id;
+el("empId").value=x.id;el("empId").disabled=true;
+el("name").value=x.name;el("department").value=x.department;
+el("position").value=x.position;el("basic").value=x.basic;
+el("allowance").value=x.allowance;el("deduct").value=x.deduction;
+el("formTitle").textContent="Edit Employee";
+el("saveBtn").textContent="Save Changes";
+window.scrollTo({top:0,behavior:"smooth"});
+}
+function deleteEmployee(id){
+const x=employees.find(e=>e.id===id);
+if(x&&confirm("Delete employee "+x.name+"?")){
+employees=employees.filter(e=>e.id!==id);save();render();
+if(editingId===id)resetForm();
+}
+}
+function payslip(id){
+const x=employees.find(e=>e.id===id);if(!x)return;
+const net=x.basic+x.allowance-x.deduction;
+const w=window.open("","_blank");
+if(!w){alert("Allow pop-ups to open the payslip.");return;}
+w.document.write(`<html><head><title>Payslip</title><style>body{font-family:Arial;padding:30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:12px;text-align:left}h1{color:#1765cc}</style></head><body><h1>PAYROLL MANAGEMENT SYSTEM</h1><h2>Employee Payslip</h2><p><b>Employee ID:</b> ${safe(x.id)}</p><p><b>Name:</b> ${safe(x.name)}</p><p><b>Department:</b> ${safe(x.department)}</p><p><b>Position:</b> ${safe(x.position)}</p><table><tr><th>Salary Component</th><th>Amount</th></tr><tr><td>Basic Salary</td><td>${money(x.basic)}</td></tr><tr><td>Allowance</td><td>${money(x.allowance)}</td></tr><tr><td>Gross Salary</td><td>${money(x.basic+x.allowance)}</td></tr><tr><td>Deduction</td><td>${money(x.deduction)}</td></tr><tr><th>Net Salary</th><th>${money(net)}</th></tr></table><p>Generated by Payroll Management System</p><button onclick="window.print()">Print Payslip</button></body></html>`);
+w.document.close();
+}
+function safe(s){
+return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function render(){
+const q=el("search").value.toLowerCase();
+const shown=employees.filter(x=>(x.id+" "+x.name+" "+x.department+" "+x.position).toLowerCase().includes(q));
+el("count").textContent=employees.length;
+el("gross").textContent=money(employees.reduce((s,x)=>s+x.basic+x.allowance,0));
+el("deductions").textContent=money(employees.reduce((s,x)=>s+x.deduction,0));
+el("net").textContent=money(employees.reduce((s,x)=>s+x.basic+x.allowance-x.deduction,0));
+el("rows").innerHTML=shown.map(x=>`<tr><td>${safe(x.id)}</td><td>${safe(x.name)}</td><td>${safe(x.department)}</td><td>${money(x.basic)}</td><td>${money(x.allowance)}</td><td>${money(x.deduction)}</td><td><b>${money(x.basic+x.allowance-x.deduction)}</b></td><td><button onclick="editEmployee(${JSON.stringify(x.id)})">Edit</button><button class="secondary" onclick="payslip(${JSON.stringify(x.id)})">Payslip</button><button class="danger" onclick="deleteEmployee(${JSON.stringify(x.id)})">Delete</button></td></tr>`).join("");
+if(!shown.length)el("rows").innerHTML='<tr><td colspan="8">No employees found. Add an employee using the form above.</td></tr>';
+}
+function exportData(){
+const blob=new Blob([JSON.stringify(employees,null,2)],{type:"application/json"});
+const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+a.download="payroll-backup.json";a.click();URL.revokeObjectURL(a.href);
+}
+function importData(event){
+const file=event.target.files[0];if(!file)return;
+const reader=new FileReader();
+reader.onload=()=>{
+try{
+const data=JSON.parse(reader.result);
+if(!Array.isArray(data)||!data.every(x=>x&&typeof x.id==="string"&&typeof x.name==="string"&&Number.isFinite(Number(x.basic))&&Number.isFinite(Number(x.allowance))&&Number.isFinite(Number(x.deduction))) )throw Error();
+if(!confirm("Replace current employee records with this backup?"))return;
+employees=data;save();render();resetForm();alert("Backup imported.");
+}catch(e){alert("Invalid payroll backup file.");}
+event.target.value="";
+};
+reader.readAsText(file);
+}
+render();
+</script>
+</body>
+</html>
